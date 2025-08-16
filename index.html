@@ -103,6 +103,84 @@ if(state===STATE.win) banner('YOU WIN','スコア: '+score);
 
 }
 
+// ===== 開始（どこを押しても開始できるよう強化） ===== function startGame(){ if(state===STATE.playing) return; if(startOverlay) startOverlay.style.display='none'; reset(); setState(STATE.playing); } // 明示ボタン startBtn.addEventListener('click', startGame, {passive:true}); // オーバーレイどこでも startOverlay.addEventListener('click', startGame, {passive:true}); // キャンバス・操作UIからも開始 cv.addEventListener('pointerdown', startGame, {passive:true}); stick.addEventListener('pointerdown', startGame, {passive:true}); fireBtn.addEventListener('pointerdown', (e)=>{ if(state!==STATE.playing) startGame(); /* その後の処理は既存が実行 */ }, {passive:true}); setState(STATE.playing); }, {passive:true});
+
+// ===== 描画ヘルパ ===== function drawShip(x,y,r,color){ cx.fillStyle=color; cx.beginPath(); cx.moveTo(x+r,y); cx.lineTo(x-r0.8,y-r0.9); cx.lineTo(x-r0.6,y+r0.9); cx.closePath(); cx.fill(); } function drawBullet(b){ cx.fillStyle='#e0f2fe'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI2); cx.fill(); } function drawEBullet(b){ cx.fillStyle='#fbbf24'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI2); cx.fill(); } function drawEnemy(e){ cx.fillStyle='#a78bfa'; cx.beginPath(); cx.arc(e.x,e.y,e.r,0,Math.PI2); cx.fill(); } function banner(t,s){ cx.fillStyle='rgba(0,0,0,0.45)'; cx.fillRect(0, vh0.35, vw, vh*0.3); cx.textAlign='center'; cx.font='700 40px system-ui'; cx.fillStyle='#e2e8f0'; cx.fillText(t, vw/2, vh/2); cx.font='14px system-ui'; cx.fillStyle='#a3b2c7'; cx.fillText(s, vw/2, vh/2+28); }
+
+// ===== 判定 ===== function circleHit(x1,y1,r1,x2,y2,r2){ const dx=x1-x2, dy=y1-y2; const rr=r1+r2; return dxdx+dydy<=rr*rr; }
+
+function gid(id){ return document.getElementById(id); } })(); </script>
+
+</body>
+</html><div id="startOverlay">
+  <div class="card">
+    <h1>SF SHOOTER</h1>
+    <p>左の丸：移動　右の丸：ショット（長押しで連射）</p>
+    <button id="btnStart">▶ 開始</button>
+  </div>
+</div>
+<script>
+'use strict';
+(function(){
+  // ===== 取得 =====
+  const cv=document.getElementById('cv');
+  const cx=cv.getContext('2d',{alpha:false});
+  const HUD={ state:gid('state'), score:gid('score'), lives:gid('lives') };
+  const errBox=document.getElementById('err');
+  const stick=document.getElementById('stick');
+  const knob=document.getElementById('stickKnob');
+  const fireBtn=document.getElementById('fire');
+  const startOverlay=document.getElementById('startOverlay');
+  const startBtn=document.getElementById('btnStart');
+  function showErr(msg){ errBox.style.display='block'; errBox.textContent=String(msg); }
+  if(!cx){ showErr('Canvas初期化に失敗'); return; }// ===== 画面・DPR対応 ===== let vw=0,vh=0,dpr=1; function resize(){ dpr=Math.max(1, Math.min(3, window.devicePixelRatio||1)); vw=window.innerWidth; vh=window.innerHeight; const w=Math.floor(vwdpr), h=Math.floor(vhdpr); if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; } cx.setTransform(dpr,0,0,dpr,0,0); } addEventListener('resize', resize); addEventListener('orientationchange', resize); resize();
+
+// ===== 状態 ===== const STATE={title:'title',playing:'playing',paused:'paused',gameover:'gameover',win:'win'}; let state=STATE.title; const setState=s=>{state=s; HUD.state.textContent=s}; let score=0,lives=3;
+
+// ===== ゲームオブジェクト ===== const player={x:vw0.18,y:vh0.5,r:16,speed:380,cd:0}; const bullets=[], enemies=[], enemyBullets=[]; let enemyTimer=0, gameOverTimer=0;
+
+function reset(){ player.x=vw0.18; player.y=vh0.5; player.cd=0; bullets.length=enemies.length=enemyBullets.length=0; enemyTimer=0; score=0; lives=3; HUD.score.textContent=score; HUD.lives.textContent=lives; }
+
+// ===== 入力（バーチャルスティック＋発射） ===== let wantShoot=false, autoFire=false; let joyActive=false, joyDX=0, joyDY=0; function stickCenter(){ const r=stick.getBoundingClientRect(); return {cx:r.left+r.width/2, cy:r.top+r.height/2, rad:Math.min(r.width,r.height)/2}; } function updateKnob(px,py){ const {cx:cX,cy:cY,rad}=stickCenter(); const dx=px-cX, dy=py-cY; const dist=Math.hypot(dx,dy); const lim=rad0.9; const k = dist>lim ? lim/dist : 1; const nx=dxk, ny=dy*k; knob.style.transform=translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px)); joyDX=(dx/lim); joyDY=(dy/lim); const len=Math.min(1, Math.hypot(joyDX,joyDY)); if(len>0){ joyDX/=len; joyDY/=len; } } stick.addEventListener('pointerdown', ev=>{ joyActive=true; stick.setPointerCapture(ev.pointerId); updateKnob(ev.clientX,ev.clientY); ev.preventDefault(); },{passive:false}); stick.addEventListener('pointermove', ev=>{ if(!joyActive) return; updateKnob(ev.clientX,ev.clientY); }); function endStick(){ joyActive=false; joyDX=joyDY=0; knob.style.transform='translate(-50%,-50%)'; } stick.addEventListener('pointerup', endStick); stick.addEventListener('pointercancel', endStick); stick.addEventListener('pointerleave', endStick); fireBtn.addEventListener('pointerdown', ev=>{ fireBtn.classList.add('pressed'); wantShoot=true; autoFire=true; ev.preventDefault(); },{passive:false}); function endFire(){ fireBtn.classList.remove('pressed'); autoFire=false; } fireBtn.addEventListener('pointerup', endFire); fireBtn.addEventListener('pointercancel', endFire); fireBtn.addEventListener('pointerleave', endFire); document.addEventListener('visibilitychange',()=>{ if(document.hidden && state===STATE.playing) setState(STATE.paused); });
+
+// ===== ループ ===== let last=performance.now(); function loop(now){ const dt=Math.min(0.033, Math.max(0.001,(now-last)/1000)); last=now; if(state===STATE.playing) update(dt); draw(); requestAnimationFrame(loop);
+
+// どこでもタップで開始（オーバーレイが押せない端末対策） cv.addEventListener('pointerdown', ()=>{ if(state!==STATE.playing){ if(startOverlay) startOverlay.style.display='none'; reset(); setState(STATE.playing); } }, {passive:true}); } requestAnimationFrame(loop);
+
+// ===== 更新 ===== function update(dt){ // 移動 const dead=0.18; let up=false,down=false,left=false,right=false; if(joyActive){ up=(joyDY<-dead); down=(joyDY>dead); left=(joyDX<-dead); right=(joyDX>dead); } const v=player.speed*(joyActive?Math.min(1,Math.hypot(joyDX,joyDY)):1)dt; if(up) player.y-=v; if(down) player.y+=v; if(left) player.x-=v; if(right) player.x+=v; player.x=Math.max(player.r,Math.min(vw0.8,player.x)); player.y=Math.max(player.r,Math.min(vh-player.r,player.y));
+
+// 自弾
+player.cd-=dt; if((autoFire||wantShoot)&&player.cd<=0){ bullets.push({x:player.x+player.r+2,y:player.y,vx:600,vy:0,r:5,life:1.2}); player.cd=autoFire?0.12:0.2; wantShoot=false; }
+for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; if(b.life<=0||b.x>vw+20) bullets.splice(i,1); }
+
+// 敵出現
+enemyTimer-=dt; if(enemyTimer<=0){ enemyTimer=0.7; enemies.push({x:vw+20,y:40+Math.random()*(vh-80),r:14,hp:1,vx:-220}); }
+for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; e.x+=e.vx*dt; if(e.x<-30){ enemies.splice(i,1); continue; }
+  // 弾ヒット
+  for(let bi=bullets.length-1;bi>=0;bi--){ const b=bullets[bi]; if(circleHit(e.x,e.y,e.r, b.x,b.y,b.r)){ bullets.splice(bi,1); e.hp--; if(e.hp<=0){ enemies.splice(i,1); score+=100; HUD.score.textContent=score; } break; } }
+  // 体当たり
+  if(circleHit(e.x,e.y,e.r, player.x,player.y,player.r)){ enemies.splice(i,1); damage(); }
+}
+
+// 敵弾（今回は簡易：たまに前方へ）
+if(Math.random()<0.03){ enemyBullets.push({x:vw+10,y:40+Math.random()*(vh-80),vx:-260,vy:(Math.random()-0.5)*60,r:4}); }
+for(let i=enemyBullets.length-1;i>=0;i--){ const eb=enemyBullets[i]; eb.x+=eb.vx*dt; eb.y+=eb.vy*dt; if(eb.x<-40||eb.x>vw+40||eb.y<-40||eb.y>vh+40){ enemyBullets.splice(i,1); continue; } if(circleHit(eb.x,eb.y,eb.r, player.x,player.y,player.r)){ enemyBullets.splice(i,1); damage(); } }
+
+if(state===STATE.gameover){ gameOverTimer+=dt; if(gameOverTimer>1.2){ setState(STATE.title); startOverlay.style.display='grid'; } }
+
+}
+
+function damage(){ lives--; HUD.lives.textContent=lives; if(lives<=0){ setState(STATE.gameover); gameOverTimer=0; } }
+
+// ===== 描画 ===== function draw(){ // 背景（星） cx.fillStyle='#061123'; cx.fillRect(0,0,vw,vh); cx.globalAlpha=.35; for(let x=0;x<vw;x+=24){ for(let y=0;y<vh;y+=18){ cx.fillStyle='#20314d'; cx.fillRect((x+((x*y)%7)), (y+((x+y)%5)), 2, 2); } } cx.globalAlpha=1; // 自機 drawShip(player.x,player.y,player.r,'#7dd3fc'); // 弾 bullets.forEach(b=>drawBullet(b)); // 敵 enemies.forEach(e=>drawEnemy(e)); // 敵弾 enemyBullets.forEach(b=>drawEBullet(b));
+
+if(state===STATE.title) banner('タップで開始','左：スティック 右：ショット');
+if(state===STATE.paused) banner('PAUSED','もう一度タップで再開');
+if(state===STATE.gameover) banner('GAME OVER','スコア: '+score);
+if(state===STATE.win) banner('YOU WIN','スコア: '+score);
+
+}
+
 // ===== 開始 ===== startBtn.addEventListener('click', ()=>{ startOverlay.style.display='none'; reset(); setState(STATE.playing); }, {passive:true});
 
 // ===== 描画ヘルパ ===== function drawShip(x,y,r,color){ cx.fillStyle=color; cx.beginPath(); cx.moveTo(x+r,y); cx.lineTo(x-r0.8,y-r0.9); cx.lineTo(x-r0.6,y+r0.9); cx.closePath(); cx.fill(); } function drawBullet(b){ cx.fillStyle='#e0f2fe'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI2); cx.fill(); } function drawEBullet(b){ cx.fillStyle='#fbbf24'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI2); cx.fill(); } function drawEnemy(e){ cx.fillStyle='#a78bfa'; cx.beginPath(); cx.arc(e.x,e.y,e.r,0,Math.PI2); cx.fill(); } function banner(t,s){ cx.fillStyle='rgba(0,0,0,0.45)'; cx.fillRect(0, vh0.35, vw, vh*0.3); cx.textAlign='center'; cx.font='700 40px system-ui'; cx.fillStyle='#e2e8f0'; cx.fillText(t, vw/2, vh/2); cx.font='14px system-ui'; cx.fillStyle='#a3b2c7'; cx.fillText(s, vw/2, vh/2+28); }
