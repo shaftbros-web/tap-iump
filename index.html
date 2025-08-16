@@ -112,6 +112,13 @@ if(state===STATE.win) banner('YOU WIN','スコア: '+score);
 function gid(id){ return document.getElementById(id); } })(); </script>
 
 </body>
+</html> cx.closePath(); cx.fill(); } function drawBullet(b){ cx.fillStyle='#e0f2fe'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI2); cx.fill(); } function drawEBullet(b){ cx.fillStyle='#fbbf24'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI2); cx.fill(); } function drawEnemy(e){ cx.fillStyle='#a78bfa'; cx.beginPath(); cx.arc(e.x,e.y,e.r,0,Math.PI2); cx.fill(); } function banner(t,s){ cx.fillStyle='rgba(0,0,0,0.45)'; cx.fillRect(0, vh0.35, vw, vh*0.3); cx.textAlign='center'; cx.font='700 40px system-ui'; cx.fillStyle='#e2e8f0'; cx.fillText(t, vw/2, vh/2); cx.font='14px system-ui'; cx.fillStyle='#a3b2c7'; cx.fillText(s, vw/2, vh/2+28); }
+
+// ===== 判定 ===== function circleHit(x1,y1,r1,x2,y2,r2){ const dx=x1-x2, dy=y1-y2; const rr=r1+r2; return dxdx+dydy<=rr*rr; }
+
+function gid(id){ return document.getElementById(id); } })(); </script>
+
+</body>
 </html>s){
   finalBoss.x+=finalBoss.vx*dt; if(finalBoss.x<vw*0.65) finalBoss.vx=0; finalBoss.cd-=dt;
   if(finalBoss.cd<=0){ finalBoss.cd=0.16; const a=Math.random()*Math.PI*2; bossBullets.push({x:finalBoss.x,y:finalBoss.y,vx:Math.cos(a)*220,vy:Math.sin(a)*220,r:5}); }
