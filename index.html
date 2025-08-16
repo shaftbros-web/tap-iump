@@ -1,40 +1,127 @@
-<!DOCTYPE html><html lang="ja">
+<!DOCTYPE html>
+<html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>横スクロール SF シューティング（スマホ最適化＋操作UI）</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>スマホ用シューティング</title>
 <style>
-  :root{--bg:#05070e;--panel:#0d1420;--text:#e6edf3;--muted:#a3b2c7}
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui;-webkit-tap-highlight-color:transparent;overflow:hidden}
-  canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none}
-  #ui{position:fixed;inset:0;pointer-events:none;z-index:10}
-  #hud{position:fixed;left:calc(env(safe-area-inset-left) + 10px);top:calc(env(safe-area-inset-top) + 10px);background:rgba(13,20,32,.75);backdrop-filter:blur(6px);border:1px solid #223048;border-radius:12px;padding:6px 10px;font-size:14px;display:flex;gap:10px;align-items:center;pointer-events:auto}
-  #hud b{font-weight:700}
-  #buttons{position:fixed;right:calc(env(safe-area-inset-right) + 10px);top:calc(env(safe-area-inset-top) + 10px);display:flex;gap:8px;pointer-events:auto}
-  .btn{background:#0b1220;border:1px solid #223048;color:var(--text);border-radius:12px;padding:10px 12px;font-size:14px}
-  #help{position:fixed;left:calc(env(safe-area-inset-left) + 10px);bottom:calc(env(safe-area-inset-bottom) + 10px);color:var(--muted);font-size:12px;background:rgba(13,20,32,.6);padding:6px 8px;border-radius:10px}
-  #err{position:fixed;left:calc(env(safe-area-inset-left) + 10px);top:calc(env(safe-area-inset-top) + 64px);background:#7f1d1d;color:#fee2e2;padding:10px 12px;border-radius:8px;display:none;z-index:9999;max-width:92vw;pointer-events:none}
-  /* === 操作UI === */
-  #controls{position:fixed;inset:0;pointer-events:none;z-index:11}
-  #stick{position:fixed;left:calc(env(safe-area-inset-left) + 16px);bottom:calc(env(safe-area-inset-bottom) + 16px);width:clamp(90px,22vmin,160px);height:clamp(90px,22vmin,160px);border-radius:50%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);pointer-events:auto}
-  #stickKnob{position:absolute;left:50%;top:50%;width:48%;height:48%;transform:translate(-50%,-50%);border-radius:50%;background:rgba(125,211,252,0.35);border:1px solid rgba(125,211,252,0.8)}
-  #fire{position:fixed;right:calc(env(safe-area-inset-right) + 16px);bottom:calc(env(safe-area-inset-bottom) + 18px);width:clamp(72px,18vmin,140px);height:clamp(72px,18vmin,140px);border-radius:50%;display:grid;place-items:center;background:rgba(248,113,113,0.28);border:1px solid rgba(248,113,113,0.8);color:#fff;font-weight:700;letter-spacing:.5px;text-shadow:0 1px 2px rgba(0,0,0,.5);pointer-events:auto;user-select:none}
-  #fire.pressed{background:rgba(248,113,113,0.45)}
+  body {
+    margin: 0;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+    margin: 0 auto;
+    background: #111;
+  }
+  #controls {
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    pointer-events: auto;
+  }
+  button {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: none;
+    font-size: 20px;
+    background: rgba(255,0,0,0.7);
+    color: #fff;
+    font-weight: bold;
+  }
+  #left, #right {
+    background: rgba(0,0,255,0.6);
+  }
+  #up, #down {
+    background: rgba(0,255,0,0.6);
+  }
 </style>
 </head>
 <body>
-<canvas id="cv"></canvas>
-<div id="ui">
-  <div id="hud">状態: <b id="state">title</b>｜スコア: <b id="score">0</b>｜残機: <b id="lives">3</b></div>
-  <div id="buttons">
-    <button id="btnStart" class="btn">▶ 開始</button>
-    <button id="btnPause" class="btn">⏸</button>
-    <button id="btnReset" class="btn">↺</button>
-  </div>
-  <div id="help">左の円＝スティック / 右の円＝ショット（長押しで連射）</div>
-  <div id="err"></div>
-</div>
+<canvas id="gameCanvas"></canvas>
+
 <div id="controls">
+  <button id="left">←</button>
+  <button id="right">→</button>
+  <button id="up">↑</button>
+  <button id="down">↓</button>
+  <button id="fire">FIRE</button>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// スマホ画面に合わせる
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+// --- プレイヤー ---
+let player = {x: canvas.width/2, y: canvas.height-80, size: 20};
+let bullets = [];
+
+// 入力状態
+let keys = {left:false,right:false,up:false,down:false,fire:false};
+
+// ボタン操作
+document.getElementById("left").ontouchstart = ()=>keys.left=true;
+document.getElementById("left").ontouchend = ()=>keys.left=false;
+document.getElementById("right").ontouchstart = ()=>keys.right=true;
+document.getElementById("right").ontouchend = ()=>keys.right=false;
+document.getElementById("up").ontouchstart = ()=>keys.up=true;
+document.getElementById("up").ontouchend = ()=>keys.up=false;
+document.getElementById("down").ontouchstart = ()=>keys.down=true;
+document.getElementById("down").ontouchend = ()=>keys.down=false;
+document.getElementById("fire").ontouchstart = ()=>{keys.fire=true;};
+document.getElementById("fire").ontouchend = ()=>{keys.fire=false;};
+
+// --- ゲームループ ---
+function update(){
+  if(keys.left) player.x -= 5;
+  if(keys.right) player.x += 5;
+  if(keys.up) player.y -= 5;
+  if(keys.down) player.y += 5;
+
+  if(keys.fire){
+    bullets.push({x: player.x, y: player.y-20});
+  }
+
+  bullets.forEach(b=> b.y -= 8);
+  bullets = bullets.filter(b=> b.y > 0);
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="cyan";
+  ctx.beginPath();
+  ctx.arc(player.x,player.y,player.size,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="yellow";
+  bullets.forEach(b=>{
+    ctx.fillRect(b.x-2,b.y-10,4,10);
+  });
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html><div id="controls">
   <div id="stick"><div id="stickKnob"></div></div>
   <div id="fire">FIRE</div>
 </div>
