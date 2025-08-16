@@ -1,20 +1,175 @@
-<!DOCTYPE html>
-<html lang="ja">
+<!DOCTYPE html><html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tap Jump Game テスト</title>
-  <style>
-    body { margin: 0; text-align: center; font-family: sans-serif; }
-    canvas { background: #f0f0f0; display: block; margin: 0 auto; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>横スクロール SF シューティング（修復・安定版）</title>
+<style>
+  html,body{height:100%;margin:0;background:#05070e;color:#e6edf3;font-family:ui-sans-serif,system-ui}
+  #wrap{max-width:980px;margin:0 auto;padding:12px;display:grid;gap:12px}
+  header,footer{background:#0d1420;border-radius:14px;padding:8px 12px}
+  #game{display:grid;grid-template-columns:1fr 280px;gap:12px}
+  canvas{width:100%;aspect-ratio:16/9;background:#05070e;border-radius:14px;display:block;touch-action:none}
+  #hud button{background:#0b1220;border:1px solid #223048;color:#e6edf3;border-radius:10px;padding:6px 10px;cursor:pointer}
+  #err{position:fixed;left:12px;top:12px;background:#7f1d1d;color:#fee2e2;padding:10px 12px;border-radius:8px;display:none;z-index:9999;max-width:90vw}
+</style>
 </head>
 <body>
-  <h1>Tap Jump Game テスト</h1>
-  <p>画面をタップしてキャラをジャンプさせてみよう！</p>
-  <canvas id="gameCanvas" width="300" height="400"></canvas>
+<div id="wrap">
+  <header>
+    <div style="font-weight:700">横スクロール SF シューティング（修復・安定版）</div>
+    <div id="hud"><span>状態: <b id="state">title</b></span> <span>スコア: <b id="score">0</b></span> <span>残機: <b id="lives">3</b></span> <button id="btnStart">▶ 開始</button> <button id="btnPause">⏸ ポーズ</button> <button id="btnReset">↺ リセット</button></div>
+  </header>
+  <section id="game">
+    <canvas id="cv" width="960" height="540" tabindex="0"></canvas>
+    <aside><ul>
+      <li>通常敵を倒すと+100</li>
+      <li>スコア3000で中ボス（1体だけ）出現</li>
+      <li>中ボス撃破の20秒後に最終ボス出現</li>
+    </ul></aside>
+  </section>
+  <footer>MIT相当。自由に改造OK。</footer>
+</div>
+<div id="err"></div>
+<script>
+'use strict';
+(function(){
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();function init(){ const cv = document.getElementById('cv'); const cx = cv && cv.getContext('2d'); const errBox = document.getElementById('err'); function showErr(msg){ if(!errBox) return alert(msg); errBox.style.display='block'; errBox.textContent=String(msg); } if(!cv||!cx){ showErr('Canvas初期化に失敗 (#cv)'); return; }
 
-  <!-- ゲームコードを読み込み -->
-  <script src="game.js"></script>
+const HUD={ state:gid('state'), score:gid('score'), lives:gid('lives'), start:gid('btnStart'), pause:gid('btnPause'), reset:gid('btnReset') };
+for(const [k,v] of Object.entries(HUD)) if(!v){ showErr('HUD要素が見つかりません: '+k); return; }
+
+const STATE={title:'title',playing:'playing',paused:'paused',gameover:'gameover',win:'win'}; let state=STATE.title; const setState=s=>{state=s; HUD.state.textContent=s};
+
+// 入力
+const keys=new Set(); let wantShoot=false; let midBossSpawned=false;
+addEventListener('keydown',e=>{const c=e.code, k=(e.key||'').toLowerCase(); const g=['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyA','KeyS','KeyD','KeyP'].includes(c)||['arrowup','arrowdown','arrowleft','arrowright',' ','w','a','s','d','p'].includes(k); if(g) e.preventDefault(); keys.add((k||c).toLowerCase()); if(c==='Space'||k===' ') wantShoot=true; if(c==='KeyP'||k==='p') togglePause();},{passive:false});
+addEventListener('keyup',e=>{const c=e.code, k=(e.key||'').toLowerCase(); keys.delete((k||c).toLowerCase());},{passive:false});
+
+HUD.start.onclick=()=>{ if(state!==STATE.playing){ reset(); setState(STATE.playing); cv.focus(); } };
+HUD.pause.onclick=()=> togglePause();
+HUD.reset.onclick=()=>{ reset(); setState(STATE.title); };
+function togglePause(){ setState(state===STATE.playing?STATE.paused:STATE.playing); }
+
+// 世界
+const player={x:cv.width*0.18,y:cv.height*0.5,r:14,speed:300,cd:0};
+const bullets=[], enemies=[], bossBullets=[], lasers=[];
+let enemyTimer=0, boss=null, finalBoss=null, finalBossTimer=null, score=0, lives=3;
+
+function reset(){
+  player.x=cv.width*0.18; player.y=cv.height*0.5; player.cd=0;
+  bullets.length=0; enemies.length=0; bossBullets.length=0; lasers.length=0;
+  enemyTimer=0; boss=null; finalBoss=null; finalBossTimer=null; midBossSpawned=false;
+  score=0; lives=3; HUD.score.textContent=score; HUD.lives.textContent=lives;
+}
+
+// ループ
+let last=performance.now();
+function loop(now){ const dt=Math.min(0.033,Math.max(0.001,(now-last)/1000)); last=now; if(state===STATE.playing) update(dt); draw(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+function update(dt){
+  // 入力
+  const up=keys.has('arrowup')||keys.has('keyw'); const down=keys.has('arrowdown')||keys.has('keys'); const left=keys.has('arrowleft')||keys.has('keya'); const right=keys.has('arrowright')||keys.has('keyd');
+  if(up) player.y-=player.speed*dt; if(down) player.y+=player.speed*dt; if(left) player.x-=player.speed*dt; if(right) player.x+=player.speed*dt;
+  player.x=Math.max(player.r,Math.min(cv.width*0.8,player.x)); player.y=Math.max(player.r,Math.min(cv.height-player.r,player.y));
+
+  // 自機弾
+  player.cd-=dt; if(wantShoot && player.cd<=0){ bullets.push({x:player.x+player.r+2,y:player.y,vx:580,vy:0,r:4,life:1.3}); player.cd=0.12; wantShoot=false; }
+  for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; if(b.life<=0||b.x>cv.width+12) bullets.splice(i,1); }
+
+  // 雑魚（ボス不在時のみ）
+  if(!boss && !finalBoss){
+    enemyTimer-=dt; if(enemyTimer<=0){ enemyTimer=0.5; enemies.push({x:cv.width+20,y:40+Math.random()*(cv.height-80),r:12,vx:-200}); }
+    for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; e.x+=e.vx*dt; if(e.x<-30){ enemies.splice(i,1); continue; }
+      // 弾 vs 雑魚
+      for(let bi=bullets.length-1;bi>=0;bi--){ const b=bullets[bi]; if(circleHit(e.x,e.y,e.r, b.x,b.y,b.r)){ enemies.splice(i,1); bullets.splice(bi,1); score+=100; HUD.score.textContent=score; break; } }
+      // 雑魚 vs 自機
+      if(circleHit(e.x,e.y,e.r, player.x,player.y,player.r)){ enemies.splice(i,1); damage(); }
+    }
+    // 中ボス出現（1回のみ）
+    if(!midBossSpawned && score>=3000){ boss={x:cv.width+100,y:cv.height/2,r:40,hp:100,phase:1,vx:-60,cd:0}; midBossSpawned=true; }
+  }
+
+  // 中ボス
+  if(boss){
+    boss.x+=boss.vx*dt; if(boss.x<cv.width*0.7) boss.vx=0; boss.cd-=dt;
+    if(boss.phase===1){ if(boss.cd<=0){ boss.cd=0.4; bossBullets.push({x:boss.x,y:boss.y,vx:-200,vy:(Math.random()-0.5)*120,r:6}); } }
+    else if(boss.phase===2){ if(boss.cd<=0){ boss.cd=0.1; const a=Math.random()*Math.PI*2; bossBullets.push({x:boss.x,y:boss.y,vx:Math.cos(a)*180,vy:Math.sin(a)*180,r:4}); } if(Math.random()<0.02) lasers.push({x:boss.x-50,y:boss.y-100,w:200,h:200,time:0.5}); }
+
+    // 自機弾 vs 中ボス（nullガード＋早期スキップ入り）
+    for(let bi=bullets.length-1; bi>=0; bi--){ const b=bullets[bi]; if(boss && circleHit(boss.x,boss.y,boss.r, b.x,b.y,b.r)){ bullets.splice(bi,1); boss.hp-=1; if(boss.hp===50) boss.phase=2; if(boss.hp<=0){ score+=2000; HUD.score.textContent=score; boss=null; finalBossTimer=20; return; } } }
+
+    // 体当たり（bossが存在する時のみ）
+    if(boss && circleHit(boss.x,boss.y,boss.r, player.x,player.y,player.r)) damage();
+  }
+
+  // 最終ボス出現タイマー
+  if(finalBossTimer!==null){ finalBossTimer-=dt; if(finalBossTimer<=0){ finalBossTimer=null; finalBoss={x:cv.width+120,y:cv.height/2,r:50,hp:200,vx:-40,cd:0}; } }
+
+  // 最終ボス
+  if(finalBoss){
+    finalBoss.x+=finalBoss.vx*dt; if(finalBoss.x<cv.width*0.65) finalBoss.vx=0; finalBoss.cd-=dt;
+    if(finalBoss.cd<=0){ finalBoss.cd=0.15; const a=Math.random()*Math.PI*2; bossBullets.push({x:finalBoss.x,y:finalBoss.y,vx:Math.cos(a)*200,vy:Math.sin(a)*200,r:5}); }
+    // 自機弾 vs 最終ボス（防御）
+    for(let bi=bullets.length-1; bi>=0; bi--){ const b=bullets[bi]; if(finalBoss && circleHit(finalBoss.x,finalBoss.y,finalBoss.r, b.x,b.y,b.r)){ bullets.splice(bi,1); finalBoss.hp-=10; if(finalBoss.hp<=0){ score+=5000; HUD.score.textContent=score; finalBoss=null; setState(STATE.win); break; } } }
+  }
+
+  // 敵弾
+  for(let i=bossBullets.length-1;i>=0;i--){ const eb=bossBullets[i]; eb.x+=eb.vx*dt; eb.y+=eb.vy*dt; if(eb.x<-40||eb.x>cv.width+40||eb.y<-40||eb.y>cv.height+40){ bossBullets.splice(i,1); continue; } if(circleHit(eb.x,eb.y,eb.r, player.x,player.y,player.r)){ bossBullets.splice(i,1); damage(); } }
+
+  // レーザー
+  for(let i=lasers.length-1;i>=0;i--){ const l=lasers[i]; l.time-=dt; if(l.time<=0){ lasers.splice(i,1); continue; } if(rectHit(l, player)){ lasers.splice(i,1); damage(); } }
+}
+
+function damage(){ lives--; HUD.lives.textContent=lives; if(lives<=0){ setState(STATE.gameover); } }
+
+function draw(){
+  cx.clearRect(0,0,cv.width,cv.height);
+  // 背景
+  cx.globalAlpha=.35; for(let x=0;x<cv.width;x+=24){ for(let y=0;y<cv.height;y+=18){ cx.fillStyle='#20314d'; cx.fillRect((x+((x*y)%7)), (y+((x+y)%5)), 2, 2); } } cx.globalAlpha=1;
+  // 自機
+  drawShip(player.x,player.y,player.r,'#7dd3fc');
+  // 弾
+  bullets.forEach(b=>drawBullet(b));
+  // 雑魚
+  enemies.forEach(e=>drawEnemy(e));
+  // ボス
+  if(boss) drawBoss(boss,'#fde047');
+  if(finalBoss) drawBoss(finalBoss,'#f87171');
+  // 敵弾
+  bossBullets.forEach(b=>drawEBullet(b));
+  // レーザー
+  lasers.forEach(l=>drawLaser(l));
+
+  if(state===STATE.title) banner('SF SHOOTER','▶ スタートで開始 / 矢印・WASD・Space');
+  if(state===STATE.paused) banner('PAUSED','P で再開');
+  if(state===STATE.gameover) banner('GAME OVER','スコア: '+score);
+  if(state===STATE.win) banner('YOU WIN','スコア: '+score);
+}
+
+// 描画ヘルパ
+function drawShip(x,y,r,color){ cx.shadowColor=color; cx.shadowBlur=18; cx.fillStyle=color; cx.beginPath(); cx.moveTo(x+r,y); cx.lineTo(x-r*0.8,y-r*0.9); cx.lineTo(x-r*0.6,y+r*0.9); cx.closePath(); cx.fill(); cx.shadowBlur=0; }
+function drawBullet(b){ cx.shadowColor='#67e8f9'; cx.shadowBlur=12; cx.fillStyle='#e0f2fe'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI*2); cx.fill(); cx.shadowBlur=0; }
+function drawEBullet(b){ cx.fillStyle='#fbbf24'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI*2); cx.fill(); }
+function drawEnemy(e){ cx.shadowColor='#a78bfa'; cx.shadowBlur=16; cx.fillStyle='#a78bfa'; cx.beginPath(); cx.arc(e.x,e.y,e.r,0,Math.PI*2); cx.fill(); cx.shadowBlur=0; }
+function drawBoss(b,color){ cx.shadowColor=color; cx.shadowBlur=24; cx.fillStyle=color; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI*2); cx.fill(); cx.shadowBlur=0; cx.fillStyle='#fff'; cx.fillText('HP:'+Math.max(0,Math.floor(b.hp||0)), b.x-24, b.y-b.r-10); }
+function drawLaser(l){ cx.fillStyle='rgba(255,0,0,0.45)'; cx.fillRect(l.x,l.y,l.w,l.h); }
+function banner(t,s){ cx.fillStyle='rgba(0,0,0,0.45)'; cx.fillRect(0, cv.height*0.35, cv.width, cv.height*0.3); cx.textAlign='center'; cx.font='700 64px system-ui'; cx.fillStyle='#e2e8f0'; cx.fillText(t, cv.width/2, cv.height/2); cx.font = '14px system-ui'; cx.fillStyle='#a3b2c7'; cx.fillText(s, cv.width/2, cv.height/2+28); }
+
+// 判定
+function circleHit(x1,y1,r1,x2,y2,r2){ const dx=x1-x2, dy=y1-y2; const rr=r1+r2; return dx*dx+dy*dy<=rr*rr; }
+function rectHit(l,p){ return p.x>l.x && p.x<l.x+l.w && p.y>l.y && p.y<l.y+l.h; }
+
+// 簡易テスト
+try{
+  console.assert(circleHit(0,0,10, 9,0,1)===true, 'circleHit TRUE');
+  console.assert(circleHit(0,0,10, 25,0,1)===false, 'circleHit FALSE');
+  console.assert(rectHit({x:0,y:0,w:10,h:10},{x:5,y:5})===true, 'rectHit TRUE');
+  console.assert(rectHit({x:0,y:0,w:10,h:10},{x:20,y:20})===false, 'rectHit FALSE');
+}catch(e){ console.warn('self tests failed', e); }
+
+function gid(id){ return document.getElementById(id); }
+
+} })(); </script>
+
 </body>
 </html>
