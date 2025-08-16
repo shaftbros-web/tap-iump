@@ -172,4 +172,23 @@ function gid(id){ return document.getElementById(id); }
 } })(); </script>
 
 </body>
+</html>0,0,0.45)'; cx.fillRect(0, cv.height*0.35, cv.width, cv.height*0.3); cx.textAlign='center'; cx.font='700 64px system-ui'; cx.fillStyle='#e2e8f0'; cx.fillText(t, cv.width/2, cv.height/2); cx.font = '14px system-ui'; cx.fillStyle='#a3b2c7'; cx.fillText(s, cv.width/2, cv.height/2+28); }
+
+// 判定
+function circleHit(x1,y1,r1,x2,y2,r2){ const dx=x1-x2, dy=y1-y2; const rr=r1+r2; return dx*dx+dy*dy<=rr*rr; }
+function rectHit(l,p){ return p.x>l.x && p.x<l.x+l.w && p.y>l.y && p.y<l.y+l.h; }
+
+// 簡易テスト
+try{
+  console.assert(circleHit(0,0,10, 9,0,1)===true, 'circleHit TRUE');
+  console.assert(circleHit(0,0,10, 25,0,1)===false, 'circleHit FALSE');
+  console.assert(rectHit({x:0,y:0,w:10,h:10},{x:5,y:5})===true, 'rectHit TRUE');
+  console.assert(rectHit({x:0,y:0,w:10,h:10},{x:20,y:20})===false, 'rectHit FALSE');
+}catch(e){ console.warn('self tests failed', e); }
+
+function gid(id){ return document.getElementById(id); }
+
+} })(); </script>
+
+</body>
 </html>
