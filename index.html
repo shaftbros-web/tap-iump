@@ -121,6 +121,93 @@ function loop(){
 loop();
 </script>
 </body>
+</html>  }
+  #left, #right {
+    background: rgba(0,0,255,0.6);
+  }
+  #up, #down {
+    background: rgba(0,255,0,0.6);
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+
+<div id="controls">
+  <button id="left">←</button>
+  <button id="right">→</button>
+  <button id="up">↑</button>
+  <button id="down">↓</button>
+  <button id="fire">FIRE</button>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// スマホ画面に合わせる
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+// --- プレイヤー ---
+let player = {x: canvas.width/2, y: canvas.height-80, size: 20};
+let bullets = [];
+
+// 入力状態
+let keys = {left:false,right:false,up:false,down:false,fire:false};
+
+// ボタン操作
+document.getElementById("left").ontouchstart = ()=>keys.left=true;
+document.getElementById("left").ontouchend = ()=>keys.left=false;
+document.getElementById("right").ontouchstart = ()=>keys.right=true;
+document.getElementById("right").ontouchend = ()=>keys.right=false;
+document.getElementById("up").ontouchstart = ()=>keys.up=true;
+document.getElementById("up").ontouchend = ()=>keys.up=false;
+document.getElementById("down").ontouchstart = ()=>keys.down=true;
+document.getElementById("down").ontouchend = ()=>keys.down=false;
+document.getElementById("fire").ontouchstart = ()=>{keys.fire=true;};
+document.getElementById("fire").ontouchend = ()=>{keys.fire=false;};
+
+// --- ゲームループ ---
+function update(){
+  if(keys.left) player.x -= 5;
+  if(keys.right) player.x += 5;
+  if(keys.up) player.y -= 5;
+  if(keys.down) player.y += 5;
+
+  if(keys.fire){
+    bullets.push({x: player.x, y: player.y-20});
+  }
+
+  bullets.forEach(b=> b.y -= 8);
+  bullets = bullets.filter(b=> b.y > 0);
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="cyan";
+  ctx.beginPath();
+  ctx.arc(player.x,player.y,player.size,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="yellow";
+  bullets.forEach(b=>{
+    ctx.fillRect(b.x-2,b.y-10,4,10);
+  });
+}
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
 </html><div id="controls">
   <div id="stick"><div id="stickKnob"></div></div>
   <div id="fire">FIRE</div>
