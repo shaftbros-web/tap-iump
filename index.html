@@ -2,7 +2,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>スマホ用 横スクロールSFシューティング（フル一枚ファイル）</title>
+<title>スマホ用 横スクロールSFシューティング（安定化v3）</title>
 <style>
   :root{--bg:#05070e;--panel:#0d1420;--text:#e6edf3;--muted:#a3b2c7}
   html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui;-webkit-tap-highlight-color:transparent;overflow:hidden}
@@ -11,7 +11,8 @@
   /* HUD */
   #hud{position:fixed;left:calc(env(safe-area-inset-left) + 10px);top:calc(env(safe-area-inset-top) + 10px);background:rgba(13,20,32,.75);backdrop-filter:blur(6px);border:1px solid #223048;border-radius:12px;padding:6px 10px;font-size:14px;display:flex;gap:10px;align-items:center;z-index:20}
   #hud b{font-weight:700}
-  #err{position:fixed;left:calc(env(safe-area-inset-left) + 10px);top:calc(env(safe-area-inset-top) + 60px);background:#7f1d1d;color:#fee2e2;padding:10px 12px;border-radius:8px;display:none;z-index:21;max-width:92vw}
+  #dbg{position:fixed;right:10px;top:10px;background:#223048;color:#cbd5e1;border-radius:8px;padding:4px 8px;font-size:12px;z-index:21;opacity:.8}
+  #err{position:fixed;left:calc(env(safe-area-inset-left) + 10px);top:calc(env(safe-area-inset-top) + 60px);background:#7f1d1d;color:#fee2e2;padding:10px 12px;border-radius:8px;display:none;z-index:21;max-width:92vw;white-space:pre-wrap}
   /* 操作UI（前面） */
   #controls{position:fixed;inset:0;pointer-events:none;z-index:15}
   #stick{position:fixed;left:calc(env(safe-area-inset-left) + 16px);bottom:calc(env(safe-area-inset-bottom) + 16px);width:clamp(96px,23vmin,180px);height:clamp(96px,23vmin,180px);border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.2);pointer-events:auto}
@@ -29,6 +30,7 @@
 <body>
 <canvas id="cv"></canvas>
 <div id="hud">状態: <b id="state">title</b>｜スコア: <b id="score">0</b>｜残機: <b id="lives">3</b></div>
+<div id="dbg">BOOT</div>
 <div id="err"></div>
 <div id="controls">
   <div id="stick"><div id="stickKnob"></div></div>
@@ -44,60 +46,170 @@
 <script>
 'use strict';
 (function(){
-  // ===== 取得 =====
-  const cv=document.getElementById('cv');
-  const cx=cv.getContext('2d',{alpha:false});
-  const HUD={ state:gid('state'), score:gid('score'), lives:gid('lives') };
-  const errBox=document.getElementById('err');
-  const stick=document.getElementById('stick');
-  const knob=document.getElementById('stickKnob');
-  const fireBtn=document.getElementById('fire');
-  const startOverlay=document.getElementById('startOverlay');
-  const startBtn=document.getElementById('btnStart');
-  function showErr(msg){ errBox.style.display='block'; errBox.textContent=String(msg); }// === エラーフック（スマホ単体でエラーを画面に表示） === window.onerror = function(message, source, lineno, colno, error){ try{ const text = JS Error: ${message} @ ${lineno}:${colno}; showErr(text); // 簡易ログ履歴（追記表示） const p = document.createElement('div'); p.style.marginTop = '6px'; p.style.fontSize = '11px'; p.textContent = (source?source.split('/').pop()+':':'') + (error&&error.stack? error.stack.split(' ')[0] : ''); errBox.appendChild(p); }catch(e){} return true; // 既定のアラートを抑止 }; // Promiseの未処理例外も捕捉 window.onunhandledrejection = function(ev){ showErr('Promise error: ' + (ev && (ev.reason && ev.reason.message || ev.reason))); }; if(!cx){ showErr('Canvas初期化に失敗'); return; }
+  // ===== 初期化は DOM 準備完了後に =====
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', init, {once:true});
+  }else{ init(); }function init(){ const cv=document.getElementById('cv'); const cx=cv.getContext('2d',{alpha:false}); const HUD={ state:gid('state'), score:gid('score'), lives:gid('lives') }; const dbg=document.getElementById('dbg'); const errBox=document.getElementById('err'); const stick=document.getElementById('stick'); const knob=document.getElementById('stickKnob'); const fireBtn=document.getElementById('fire'); const startOverlay=document.getElementById('startOverlay'); const startBtn=document.getElementById('btnStart');
 
-// ===== 画面・DPR対応 ===== let vw=0,vh=0,dpr=1; function resize(){ dpr=Math.max(1, Math.min(3, window.devicePixelRatio||1)); vw=window.innerWidth; vh=window.innerHeight; const w=Math.floor(vwdpr), h=Math.floor(vhdpr); if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; } cx.setTransform(dpr,0,0,dpr,0,0); } addEventListener('resize', resize); addEventListener('orientationchange', resize); resize();
+function showErr(msg){ errBox.style.display='block'; errBox.textContent=String(msg); }
+function log(s){ dbg.textContent=s; }
 
-// ===== 状態 ===== const STATE={title:'title',playing:'playing',paused:'paused',gameover:'gameover',win:'win'}; let state=STATE.title; const setState=s=>{state=s; HUD.state.textContent=s}; let score=0,lives=3;
+// === エラーフック（スマホ単体でエラーを画面に表示） ===
+window.onerror = function(message, source, lineno, colno, error){
+  try{
+    const text = `JS Error: ${message} @ ${lineno}:${colno}`;
+    showErr(text);
+    const p = document.createElement('div');
+    p.style.marginTop = '6px'; p.style.fontSize = '11px';
+    p.textContent = (source?source.split('/').pop()+':':'') + (error&&error.stack? error.stack.split('\n')[0] : '');
+    errBox.appendChild(p);
+  }catch(e){}
+  return true; // 既定のアラートを抑止
+};
+window.onunhandledrejection = function(ev){ showErr('Promise error: ' + (ev && (ev.reason && ev.reason.message || ev.reason))); };
 
-// ===== ゲームオブジェクト ===== const player={x:vw0.18,y:vh0.5,r:16,speed:380,cd:0}; const bullets=[], enemies=[], enemyBullets=[]; let enemyTimer=0, gameOverTimer=0;
+if(!cx){ showErr('Canvas初期化に失敗'); return; }
 
-function reset(){ player.x=vw0.18; player.y=vh0.5; player.cd=0; bullets.length=enemies.length=enemyBullets.length=0; enemyTimer=0; score=0; lives=3; HUD.score.textContent=score; HUD.lives.textContent=lives; }
-
-// ===== 入力（バーチャルスティック＋発射） ===== let wantShoot=false, autoFire=false; let joyActive=false, joyDX=0, joyDY=0; function stickCenter(){ const r=stick.getBoundingClientRect(); return {cx:r.left+r.width/2, cy:r.top+r.height/2, rad:Math.min(r.width,r.height)/2}; } function updateKnob(px,py){ const {cx:cX,cy:cY,rad}=stickCenter(); const dx=px-cX, dy=py-cY; const dist=Math.hypot(dx,dy); const lim=rad0.9; const k = dist>lim ? lim/dist : 1; const nx=dxk, ny=dy*k; knob.style.transform=translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px)); joyDX=(dx/lim); joyDY=(dy/lim); const len=Math.min(1, Math.hypot(joyDX,joyDY)); if(len>0){ joyDX/=len; joyDY/=len; } } stick.addEventListener('pointerdown', ev=>{ joyActive=true; stick.setPointerCapture(ev.pointerId); updateKnob(ev.clientX,ev.clientY); ev.preventDefault(); },{passive:false}); stick.addEventListener('pointermove', ev=>{ if(!joyActive) return; updateKnob(ev.clientX,ev.clientY); }); function endStick(){ joyActive=false; joyDX=joyDY=0; knob.style.transform='translate(-50%,-50%)'; } stick.addEventListener('pointerup', endStick); stick.addEventListener('pointercancel', endStick); stick.addEventListener('pointerleave', endStick); fireBtn.addEventListener('pointerdown', ev=>{ fireBtn.classList.add('pressed'); wantShoot=true; autoFire=true; ev.preventDefault(); },{passive:false}); function endFire(){ fireBtn.classList.remove('pressed'); autoFire=false; } fireBtn.addEventListener('pointerup', endFire); fireBtn.addEventListener('pointercancel', endFire); fireBtn.addEventListener('pointerleave', endFire); document.addEventListener('visibilitychange',()=>{ if(document.hidden && state===STATE.playing) setState(STATE.paused); });
-
-// ===== ループ ===== let last=performance.now(); function loop(now){ const dt=Math.min(0.033, Math.max(0.001,(now-last)/1000)); last=now; if(state===STATE.playing) update(dt); draw(); requestAnimationFrame(loop); } requestAnimationFrame(loop);
-
-// ===== 更新 ===== function update(dt){ // 移動 const dead=0.18; let up=false,down=false,left=false,right=false; if(joyActive){ up=(joyDY<-dead); down=(joyDY>dead); left=(joyDX<-dead); right=(joyDX>dead); } const v=player.speed*(joyActive?Math.min(1,Math.hypot(joyDX,joyDY)):1)dt; if(up) player.y-=v; if(down) player.y+=v; if(left) player.x-=v; if(right) player.x+=v; player.x=Math.max(player.r,Math.min(vw0.8,player.x)); player.y=Math.max(player.r,Math.min(vh-player.r,player.y));
-
-// 自弾
-player.cd-=dt; if((autoFire||wantShoot)&&player.cd<=0){ bullets.push({x:player.x+player.r+2,y:player.y,vx:600,vy:0,r:5,life:1.2}); player.cd=autoFire?0.12:0.2; wantShoot=false; }
-for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; if(b.life<=0||b.x>vw+20) bullets.splice(i,1); }
-
-// 敵出現
-enemyTimer-=dt; if(enemyTimer<=0){ enemyTimer=0.7; enemies.push({x:vw+20,y:40+Math.random()*(vh-80),r:14,hp:1,vx:-220}); }
-for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; e.x+=e.vx*dt; if(e.x<-30){ enemies.splice(i,1); continue; }
-  // 弾ヒット
-  for(let bi=bullets.length-1;bi>=0;bi--){ const b=bullets[bi]; if(circleHit(e.x,e.y,e.r, b.x,b.y,b.r)){ bullets.splice(bi,1); e.hp--; if(e.hp<=0){ enemies.splice(i,1); score+=100; HUD.score.textContent=score; } break; } }
-  // 体当たり
-  if(circleHit(e.x,e.y,e.r, player.x,player.y,player.r)){ enemies.splice(i,1); damage(); }
+// ===== 画面・DPR対応 =====
+let vw=0,vh=0,dpr=1; resize();
+addEventListener('resize', resize); addEventListener('orientationchange', resize);
+function resize(){
+  dpr=Math.max(1, Math.min(3, window.devicePixelRatio||1));
+  vw=window.innerWidth; vh=window.innerHeight;
+  const w=Math.floor(vw*dpr), h=Math.floor(vh*dpr);
+  if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; }
+  cx.setTransform(dpr,0,0,dpr,0,0);
 }
 
-// 敵弾（今回は簡易：たまに前方へ）
-if(Math.random()<0.03){ enemyBullets.push({x:vw+10,y:40+Math.random()*(vh-80),vx:-260,vy:(Math.random()-0.5)*60,r:4}); }
-for(let i=enemyBullets.length-1;i>=0;i--){ const eb=enemyBullets[i]; eb.x+=eb.vx*dt; eb.y+=eb.vy*dt; if(eb.x<-40||eb.x>vw+40||eb.y<-40||eb.y>vh+40){ enemyBullets.splice(i,1); continue; } if(circleHit(eb.x,eb.y,eb.r, player.x,player.y,player.r)){ enemyBullets.splice(i,1); damage(); } }
+// ===== 状態 =====
+const STATE={title:'title',playing:'playing',paused:'paused',gameover:'gameover',win:'win'}; let state=STATE.title; const setState=s=>{state=s; HUD.state.textContent=s; log('STATE:'+s);} ;
+let score=0,lives=3;
 
-if(state===STATE.gameover){ gameOverTimer+=dt; if(gameOverTimer>1.2){ setState(STATE.title); startOverlay.style.display='grid'; } }
+// ===== ゲームオブジェクト =====
+const player={x:vw*0.18,y:vh*0.5,r:16,speed:380,cd:0};
+const bullets=[], enemies=[], enemyBullets=[];
+let enemyTimer=0, gameOverTimer=0;
 
+function reset(){
+  player.x=vw*0.18; player.y=vh*0.5; player.cd=0;
+  bullets.length=enemies.length=enemyBullets.length=0;
+  enemyTimer=0; score=0; lives=3;
+  HUD.score.textContent=score; HUD.lives.textContent=lives;
+}
+
+// ===== 入力（バーチャルスティック＋発射） =====
+let wantShoot=false, autoFire=false;
+let joyActive=false, joyDX=0, joyDY=0;
+function stickCenter(){ const r=stick.getBoundingClientRect(); return {cx:r.left+r.width/2, cy:r.top+r.height/2, rad:Math.min(r.width,r.height)/2}; }
+function updateKnob(px,py){ const {cx:cX,cy:cY,rad}=stickCenter(); const dx=px-cX, dy=py-cY; const dist=Math.hypot(dx,dy); const lim=rad*0.9; const k = dist>lim ? lim/dist : 1; const nx=dx*k, ny=dy*k; knob.style.transform=`translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`; joyDX=(dx/lim); joyDY=(dy/lim); const len=Math.min(1, Math.hypot(joyDX,joyDY)); if(len>0){ joyDX/=len; joyDY/=len; } }
+stick.addEventListener('pointerdown', ev=>{ joyActive=true; stick.setPointerCapture(ev.pointerId); updateKnob(ev.clientX,ev.clientY); ev.preventDefault(); },{passive:false});
+stick.addEventListener('pointermove', ev=>{ if(!joyActive) return; updateKnob(ev.clientX,ev.clientY); });
+function endStick(){ joyActive=false; joyDX=joyDY=0; knob.style.transform='translate(-50%,-50%)'; }
+stick.addEventListener('pointerup', endStick); stick.addEventListener('pointercancel', endStick); stick.addEventListener('pointerleave', endStick);
+fireBtn.addEventListener('pointerdown', ev=>{ fireBtn.classList.add('pressed'); wantShoot=true; autoFire=true; ev.preventDefault(); },{passive:false});
+function endFire(){ fireBtn.classList.remove('pressed'); autoFire=false; }
+fireBtn.addEventListener('pointerup', endFire); fireBtn.addEventListener('pointercancel', endFire); fireBtn.addEventListener('pointerleave', endFire);
+
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && state===STATE.playing) setState(STATE.paused); });
+
+// ===== ループ =====
+let last=performance.now();
+function loop(now){ const dt=Math.min(0.033, Math.max(0.001,(now-last)/1000)); last=now; if(state===STATE.playing) update(dt); draw(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+// ===== 更新 =====
+function update(dt){
+  // 移動
+  const dead=0.18; let up=false,down=false,left=false,right=false;
+  if(joyActive){ up=(joyDY<-dead); down=(joyDY>dead); left=(joyDX<-dead); right=(joyDX>dead); }
+  const v=player.speed*(joyActive?Math.min(1,Math.hypot(joyDX,joyDY)):1)*dt;
+  if(up) player.y-=v; if(down) player.y+=v; if(left) player.x-=v; if(right) player.x+=v;
+  player.x=Math.max(player.r,Math.min(vw*0.8,player.x));
+  player.y=Math.max(player.r,Math.min(vh-player.r,player.y));
+
+  // 自弾
+  player.cd-=dt; if((autoFire||wantShoot)&&player.cd<=0){ bullets.push({x:player.x+player.r+2,y:player.y,vx:600,vy:0,r:5,life:1.2}); player.cd=autoFire?0.12:0.2; wantShoot=false; }
+  for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; if(b.life<=0||b.x>vw+20) bullets.splice(i,1); }
+
+  // 敵出現
+  enemyTimer-=dt; if(enemyTimer<=0){ enemyTimer=0.7; enemies.push({x:vw+20,y:40+Math.random()*(vh-80),r:14,hp:1,vx:-220}); }
+  for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; e.x+=e.vx*dt; if(e.x<-30){ enemies.splice(i,1); continue; }
+    // 弾ヒット
+    for(let bi=bullets.length-1;bi>=0;bi--){ const b=bullets[bi]; if(circleHit(e.x,e.y,e.r, b.x,b.y,b.r)){ bullets.splice(bi,1); e.hp--; if(e.hp<=0){ enemies.splice(i,1); score+=100; HUD.score.textContent=score; } break; } }
+    // 体当たり
+    if(circleHit(e.x,e.y,e.r, player.x,player.y,player.r)){ enemies.splice(i,1); damage(); }
+  }
+
+  // 敵弾（簡易）
+  if(Math.random()<0.03){ enemyBullets.push({x:vw+10,y:40+Math.random()*(vh-80),vx:-260,vy:(Math.random()-0.5)*60,r:4}); }
+  for(let i=enemyBullets.length-1;i>=0;i--){ const eb=enemyBullets[i]; eb.x+=eb.vx*dt; eb.y+=eb.vy*dt; if(eb.x<-40||eb.x>vw+40||eb.y<-40||eb.y>vh+40){ enemyBullets.splice(i,1); continue; } if(circleHit(eb.x,eb.y,eb.r, player.x,player.y,player.r)){ enemyBullets.splice(i,1); damage(); } }
+
+  if(state===STATE.gameover){ gameOverTimer+=dt; if(gameOverTimer>1.2){ setState(STATE.title); startOverlay.style.display='grid'; } }
 }
 
 function damage(){ lives--; HUD.lives.textContent=lives; if(lives<=0){ setState(STATE.gameover); gameOverTimer=0; } }
 
-// ===== 描画 ===== function draw(){ // 背景（星） cx.fillStyle='#061123'; cx.fillRect(0,0,vw,vh); cx.globalAlpha=.35; for(let x=0;x<vw;x+=24){ for(let y=0;y<vh;y+=18){ cx.fillStyle='#20314d'; cx.fillRect((x+((x*y)%7)), (y+((x+y)%5)), 2, 2); } } cx.globalAlpha=1; // 自機 drawShip(player.x,player.y,player.r,'#7dd3fc'); // 弾 bullets.forEach(b=>drawBullet(b)); // 敵 enemies.forEach(e=>drawEnemy(e)); // 敵弾 enemyBullets.forEach(b=>drawEBullet(b));
+// ===== 描画 =====
+function draw(){
+  // 背景（星）
+  cx.fillStyle='#061123'; cx.fillRect(0,0,vw,vh);
+  cx.globalAlpha=.35; for(let x=0;x<vw;x+=24){ for(let y=0;y<vh;y+=18){ cx.fillStyle='#20314d'; cx.fillRect((x+((x*y)%7)), (y+((x+y)%5)), 2, 2); } } cx.globalAlpha=1;
+  // 自機
+  drawShip(player.x,player.y,player.r,'#7dd3fc');
+  // 弾
+  bullets.forEach(b=>drawBullet(b));
+  // 敵
+  enemies.forEach(e=>drawEnemy(e));
+  // 敵弾
+  enemyBullets.forEach(b=>drawEBullet(b));
 
-if(state===STATE.title) banner('タップで開始','左：スティック 右：ショット');
-if(state===STATE.paused) banner('PAUSED','もう一度タップで再開');
-if(state===STATE.gameover) banner('GAME OVER','スコア: '+score);
+  if(state===STATE.title) banner('タップで開始','左：スティック 右：ショット');
+  if(state===STATE.paused) banner('PAUSED','もう一度タップで再開');
+  if(state===STATE.gameover) banner('GAME OVER','スコア: '+score);
+  if(state===STATE.win) banner('YOU WIN','スコア: '+score);
+}
+
+// ===== 開始（どこを押しても開始できるよう強化） =====
+function startGame(){
+  try{
+    if(state===STATE.playing) return;
+    if(startOverlay) startOverlay.style.display='none';
+    reset();
+    setState(STATE.playing);
+  }catch(e){ showErr('startGame error: '+e.message); }
+}
+// できるだけ多くの入力をフック（Android Chrome/Opera 対策）
+;['click','pointerdown','touchstart','keydown'].forEach(type=>{
+  startOverlay.addEventListener(type, startGame, {passive:true});
+  document.addEventListener(type, ()=>{ if(state!==STATE.playing) startGame(); }, {passive:true});
+});
+// 個別要素
+startBtn.addEventListener('click', startGame, {passive:true});
+cv.addEventListener('pointerdown', startGame, {passive:true});
+stick.addEventListener('pointerdown', startGame, {passive:true});
+fireBtn.addEventListener('pointerdown', ()=>{ if(state!==STATE.playing) startGame(); }, {passive:true});
+
+// 保険：読み込み後に自動開始（1.5秒待ち）
+window.addEventListener('load', ()=> setTimeout(()=>{ if(state!==STATE.playing) startGame(); }, 1500));
+
+// ===== 描画ヘルパ =====
+function drawShip(x,y,r,color){ cx.fillStyle=color; cx.beginPath(); cx.moveTo(x+r,y); cx.lineTo(x-r*0.8,y-r*0.9); cx.lineTo(x-r*0.6,y+r*0.9); cx.closePath(); cx.fill(); }
+function drawBullet(b){ cx.fillStyle='#e0f2fe'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI*2); cx.fill(); }
+function drawEBullet(b){ cx.fillStyle='#fbbf24'; cx.beginPath(); cx.arc(b.x,b.y,b.r,0,Math.PI*2); cx.fill(); }
+function drawEnemy(e){ cx.fillStyle='#a78bfa'; cx.beginPath(); cx.arc(e.x,e.y,e.r,0,Math.PI*2); cx.fill(); }
+function banner(t,s){ cx.fillStyle='rgba(0,0,0,0.45)'; cx.fillRect(0, vh*0.35, vw, vh*0.3); cx.textAlign='center'; cx.font='700 40px system-ui'; cx.fillStyle='#e2e8f0'; cx.fillText(t, vw/2, vh/2); cx.font='14px system-ui'; cx.fillStyle='#a3b2c7'; cx.fillText(s, vw/2, vh/2+28); }
+
+// ===== 判定 =====
+function circleHit(x1,y1,r1,x2,y2,r2){ const dx=x1-x2, dy=y1-y2; const rr=r1+r2; return dx*dx+dy*dy<=rr*rr; }
+
+function gid(id){ return document.getElementById(id); }
+
+// 最後に READY を出す
+log('READY');
+
+} })(); </script>
+
+</body>
+</html>over) banner('GAME OVER','スコア: '+score);
 if(state===STATE.win) banner('YOU WIN','スコア: '+score);
 
 }
