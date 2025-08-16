@@ -1,9 +1,3 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<title>スマホ用シューティング</title>
 <style>
   body {
     margin: 0;
@@ -15,35 +9,41 @@
     display: block;
     margin: 0 auto;
     background: #111;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0; /* キャンバスを奥に */
   }
   #controls {
     position: fixed;
-    bottom: 10px;
+    bottom: 20px; /* 少し上にしてスマホのバーと被らないように */
     left: 0;
     width: 100%;
     display: flex;
     justify-content: space-around;
-    pointer-events: auto;
+    z-index: 10; /* 前面に強制表示 */
   }
   button {
     width: 80px;
     height: 80px;
     border-radius: 50%;
     border: none;
-    font-size: 20px;
-    background: rgba(255,0,0,0.7);
+    font-size: 22px;
+    background: rgba(0,0,0,0.7);
     color: #fff;
     font-weight: bold;
   }
+  #fire {
+    background: rgba(255,0,0,0.8);
+  }
   #left, #right {
-    background: rgba(0,0,255,0.6);
+    background: rgba(0,0,255,0.7);
   }
   #up, #down {
-    background: rgba(0,255,0,0.6);
+    background: rgba(0,255,0,0.7);
   }
 </style>
-</head>
-<body>
+
 <canvas id="gameCanvas"></canvas>
 
 <div id="controls">
@@ -52,204 +52,7 @@
   <button id="up">↑</button>
   <button id="down">↓</button>
   <button id="fire">FIRE</button>
-</div>
-
-<script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-
-// スマホ画面に合わせる
-function resizeCanvas(){
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
-
-// --- プレイヤー ---
-let player = {x: canvas.width/2, y: canvas.height-80, size: 20};
-let bullets = [];
-
-// 入力状態
-let keys = {left:false,right:false,up:false,down:false,fire:false};
-
-// ボタン操作
-document.getElementById("left").ontouchstart = ()=>keys.left=true;
-document.getElementById("left").ontouchend = ()=>keys.left=false;
-document.getElementById("right").ontouchstart = ()=>keys.right=true;
-document.getElementById("right").ontouchend = ()=>keys.right=false;
-document.getElementById("up").ontouchstart = ()=>keys.up=true;
-document.getElementById("up").ontouchend = ()=>keys.up=false;
-document.getElementById("down").ontouchstart = ()=>keys.down=true;
-document.getElementById("down").ontouchend = ()=>keys.down=false;
-document.getElementById("fire").ontouchstart = ()=>{keys.fire=true;};
-document.getElementById("fire").ontouchend = ()=>{keys.fire=false;};
-
-// --- ゲームループ ---
-function update(){
-  if(keys.left) player.x -= 5;
-  if(keys.right) player.x += 5;
-  if(keys.up) player.y -= 5;
-  if(keys.down) player.y += 5;
-
-  if(keys.fire){
-    bullets.push({x: player.x, y: player.y-20});
-  }
-
-  bullets.forEach(b=> b.y -= 8);
-  bullets = bullets.filter(b=> b.y > 0);
-}
-
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="cyan";
-  ctx.beginPath();
-  ctx.arc(player.x,player.y,player.size,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.fillStyle="yellow";
-  bullets.forEach(b=>{
-    ctx.fillRect(b.x-2,b.y-10,4,10);
-  });
-}
-
-function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-loop();
-</script>
-</body>
-</html>  }
-  #left, #right {
-    background: rgba(0,0,255,0.6);
-  }
-  #up, #down {
-    background: rgba(0,255,0,0.6);
-  }
-</style>
-</head>
-<body>
-<canvas id="gameCanvas"></canvas>
-
-<div id="controls">
-  <button id="left">←</button>
-  <button id="right">→</button>
-  <button id="up">↑</button>
-  <button id="down">↓</button>
-  <button id="fire">FIRE</button>
-</div>
-
-<script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-
-// スマホ画面に合わせる
-function resizeCanvas(){
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
-
-// --- プレイヤー ---
-let player = {x: canvas.width/2, y: canvas.height-80, size: 20};
-let bullets = [];
-
-// 入力状態
-let keys = {left:false,right:false,up:false,down:false,fire:false};
-
-// ボタン操作
-document.getElementById("left").ontouchstart = ()=>keys.left=true;
-document.getElementById("left").ontouchend = ()=>keys.left=false;
-document.getElementById("right").ontouchstart = ()=>keys.right=true;
-document.getElementById("right").ontouchend = ()=>keys.right=false;
-document.getElementById("up").ontouchstart = ()=>keys.up=true;
-document.getElementById("up").ontouchend = ()=>keys.up=false;
-document.getElementById("down").ontouchstart = ()=>keys.down=true;
-document.getElementById("down").ontouchend = ()=>keys.down=false;
-document.getElementById("fire").ontouchstart = ()=>{keys.fire=true;};
-document.getElementById("fire").ontouchend = ()=>{keys.fire=false;};
-
-// --- ゲームループ ---
-function update(){
-  if(keys.left) player.x -= 5;
-  if(keys.right) player.x += 5;
-  if(keys.up) player.y -= 5;
-  if(keys.down) player.y += 5;
-
-  if(keys.fire){
-    bullets.push({x: player.x, y: player.y-20});
-  }
-
-  bullets.forEach(b=> b.y -= 8);
-  bullets = bullets.filter(b=> b.y > 0);
-}
-
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="cyan";
-  ctx.beginPath();
-  ctx.arc(player.x,player.y,player.size,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.fillStyle="yellow";
-  bullets.forEach(b=>{
-    ctx.fillRect(b.x-2,b.y-10,4,10);
-  });
-}
-
-function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-loop();
-</script>
-</body>
-</html><div id="controls">
-  <div id="stick"><div id="stickKnob"></div></div>
-  <div id="fire">FIRE</div>
-</div>
-<script>
-'use strict';
-(function(){
-  // ===== 画面・DPR対応 =====
-  const cv=document.getElementById('cv');
-  const cx=cv.getContext('2d',{alpha:false});
-  const HUD={ state:gid('state'), score:gid('score'), lives:gid('lives'), start:gid('btnStart'), pause:gid('btnPause'), reset:gid('btnReset') };
-  const errBox=gid('err');
-  const stick=document.getElementById('stick');
-  const knob=document.getElementById('stickKnob');
-  const fireBtn=document.getElementById('fire');
-  function showErr(msg){ errBox.style.display='block'; errBox.textContent=String(msg); }
-  if(!cx){ showErr('Canvas初期化に失敗'); }let vw=0,vh=0,dpr=1; function resize(){ dpr=Math.max(1, Math.min(3, window.devicePixelRatio||1)); vw=window.innerWidth; vh=window.innerHeight; cv.width=Math.floor(vwdpr); cv.height=Math.floor(vhdpr); cx.setTransform(dpr,0,0,dpr,0,0); } addEventListener('resize', resize); addEventListener('orientationchange', resize); resize();
-
-// ===== 状態 ===== const STATE={title:'title',playing:'playing',paused:'paused',gameover:'gameover',win:'win'}; let state=STATE.title; const setState=s=>{state=s; HUD.state.textContent=s}; let score=0,lives=3;
-
-// ===== ゲームオブジェクト ===== const player={x:vw0.18,y:vh0.5,r:14,speed:360,cd:0}; const bullets=[], enemies=[], bossBullets=[], lasers=[]; let enemyTimer=0, boss=null, finalBoss=null, finalBossTimer=null, midBossSpawned=false;
-
-function reset(){ player.x=vw0.18; player.y=vh0.5; player.cd=0; bullets.length=enemies.length=bossBullets.length=lasers.length=0; enemyTimer=0; boss=null; finalBoss=null; finalBossTimer=null; midBossSpawned=false; score=0; lives=3; HUD.score.textContent=score; HUD.lives.textContent=lives; }
-
-// ===== 入力（スティック＋ボタン＋キーボード） ===== let wantShoot=false, autoFire=false; const keys=new Set(); addEventListener('keydown',e=>{const k=(e.key||'').toLowerCase(); if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d',' '].includes(k)) e.preventDefault(); keys.add(k); if(k===' ') wantShoot=true;},{passive:false}); addEventListener('keyup',e=>{keys.delete((e.key||'').toLowerCase());},{passive:false});
-
-// バーチャルスティック let joyActive=false, joyDX=0, joyDY=0, joyMax=1; // 正規化ベクトル function stickCenter(){ const r=stick.getBoundingClientRect(); return {cx:r.left+r.width/2, cy:r.top+r.height/2, rad:Math.min(r.width,r.height)/2}; } function updateKnob(px,py){ const {cx,cy,rad}=stickCenter(); const dx=px-cx, dy=py-cy; const dist=Math.hypot(dx,dy); const lim=rad0.9; const k = dist>lim ? lim/dist : 1; const nx=dxk, ny=dy*k; knob.style.transform=translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px)); joyDX = (dx===0&&dy===0)?0:(dx/lim); joyDY = (dx===0&&dy===0)?0:(dy/lim); const len=Math.min(1, Math.hypot(joyDX,joyDY)); if(len>0){ joyDX/=len; joyDY/=len; } } stick.addEventListener('pointerdown', ev=>{ joyActive=true; stick.setPointerCapture(ev.pointerId); updateKnob(ev.clientX,ev.clientY); ev.preventDefault(); },{passive:false}); stick.addEventListener('pointermove', ev=>{ if(!joyActive) return; updateKnob(ev.clientX,ev.clientY); }); function endStick(){ joyActive=false; joyDX=joyDY=0; knob.style.transform='translate(-50%,-50%)'; } stick.addEventListener('pointerup', endStick); stick.addEventListener('pointercancel', endStick); stick.addEventListener('pointerleave', endStick);
-
-// 発射ボタン fireBtn.addEventListener('pointerdown', ev=>{ fireBtn.classList.add('pressed'); wantShoot=true; autoFire=true; ev.preventDefault(); },{passive:false}); function endFire(){ fireBtn.classList.remove('pressed'); autoFire=false; } fireBtn.addEventListener('pointerup', endFire); fireBtn.addEventListener('pointercancel', endFire); fireBtn.addEventListener('pointerleave', endFire);
-
-// タブ非表示で一時停止 document.addEventListener('visibilitychange',()=>{ if(document.hidden && state===STATE.playing) setState(STATE.paused); });
-
-// ===== ループ ===== let last=performance.now(); function loop(now){ const dt=Math.min(0.033, Math.max(0.001,(now-last)/1000)); last=now; if(state===STATE.playing) update(dt); draw(); requestAnimationFrame(loop); } requestAnimationFrame(loop);
-
-// ===== 更新 ===== function update(dt){ // 移動（スティック優先 → キー） const dead=0.2; let up=false,down=false,left=false,right=false; if(joyActive){ up = (joyDY < -dead); down = (joyDY > dead); left = (joyDX < -dead); right = (joyDX > dead); } // キーの入力も合成 up = up || keys.has('arrowup') || keys.has('w'); down = down || keys.has('arrowdown') || keys.has('s'); left = left || keys.has('arrowleft') || keys.has('a'); right = right || keys.has('arrowright') || keys.has('d');
-
-// 速度はスティックの強さでスケール
-let speedScale = joyActive ? Math.min(1, Math.hypot(joyDX,joyDY)) : 1;
-const v = player.speed * speedScale * dt;
-if(up) player.y -= v; if(down) player.y += v; if(left) player.x -= v; if(right) player.x += v;
-player.x=Math.max(player.r,Math.min(vw*0.8,player.x));
-player.y=Math.max(player.r,Math.min(vh-player.r,player.y));
+</div>er.y));
 
 // ショット
 player.cd-=dt; if((autoFire || wantShoot) && player.cd<=0){ bullets.push({x:player.x+player.r+2,y:player.y,vx:580,vy:0,r:5,life:1.3}); player.cd=autoFire?0.12:0.18; wantShoot=false; }
