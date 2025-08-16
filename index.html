@@ -1,11 +1,20 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>Tap Jump Game Test</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tap Jump Game テスト</title>
+  <style>
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+    canvas { background: #f0f0f0; display: block; margin: 0 auto; }
+  </style>
 </head>
 <body>
   <h1>Tap Jump Game テスト</h1>
-  <p>ここにゲームが表示されます。</p>
+  <p>画面をタップしてキャラをジャンプさせてみよう！</p>
+  <canvas id="gameCanvas" width="300" height="400"></canvas>
+
+  <!-- ゲームコードを読み込み -->
+  <script src="game.js"></script>
 </body>
 </html>
